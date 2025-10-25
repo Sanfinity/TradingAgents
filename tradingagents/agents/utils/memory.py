@@ -1,25 +1,36 @@
 import chromadb
 from chromadb.config import Settings
-from openai import OpenAI
+import google.generativeai as genai
+import os
 
 
 class FinancialSituationMemory:
     def __init__(self, name, config):
-        if config["backend_url"] == "http://localhost:11434/v1":
-            self.embedding = "nomic-embed-text"
-        else:
-            self.embedding = "text-embedding-3-small"
-        self.client = OpenAI(base_url=config["backend_url"])
+        # Configure Gemini API
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if api_key:
+            genai.configure(api_key=api_key)
+        
+        # Use Gemini's embedding model
+        self.embedding = "models/text-embedding-004"
+        
         self.chroma_client = chromadb.Client(Settings(allow_reset=True))
         self.situation_collection = self.chroma_client.create_collection(name=name)
 
     def get_embedding(self, text):
-        """Get OpenAI embedding for a text"""
+        """Get Gemini embedding for a text"""
+        # Gemini has a 36000 byte limit for embeddings
+        # Truncate text to approximately 30000 bytes to be safe (assuming ~4 bytes per char max)
+        max_chars = 7500  # ~30KB max to stay well under 36KB limit
+        if len(text) > max_chars:
+            text = text[:max_chars]
         
-        response = self.client.embeddings.create(
-            model=self.embedding, input=text
+        result = genai.embed_content(
+            model=self.embedding,
+            content=text,
+            task_type="retrieval_document"
         )
-        return response.data[0].embedding
+        return result['embedding']
 
     def add_situations(self, situations_and_advice):
         """Add financial situations and their corresponding advice. Parameter is a list of tuples (situation, rec)"""
@@ -45,7 +56,7 @@ class FinancialSituationMemory:
         )
 
     def get_memories(self, current_situation, n_matches=1):
-        """Find matching recommendations using OpenAI embeddings"""
+        """Find matching recommendations using Gemini embeddings"""
         query_embedding = self.get_embedding(current_situation)
 
         results = self.situation_collection.query(

@@ -75,6 +75,19 @@ class MessageBuffer:
             "final_trade_decision": None,
         }
 
+    def _extract_text(self, content):
+        """Extract text from content that may be a string or Gemini format (list of dicts)"""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            # Gemini returns content as list of dicts with 'text' and 'extras' fields
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and 'text' in item:
+                    text_parts.append(item['text'])
+            return ''.join(text_parts)
+        return str(content)
+
     def add_message(self, message_type, content):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         self.messages.append((timestamp, message_type, content))
@@ -115,8 +128,10 @@ class MessageBuffer:
                 "trader_investment_plan": "Trading Team Plan",
                 "final_trade_decision": "Portfolio Management Decision",
             }
+            # Extract text from Gemini format if needed
+            text_content = self._extract_text(latest_content)
             self.current_report = (
-                f"### {section_titles[latest_section]}\n{latest_content}"
+                f"### {section_titles[latest_section]}\n{text_content}"
             )
 
         # Update the final complete report
@@ -138,35 +153,35 @@ class MessageBuffer:
             report_parts.append("## Analyst Team Reports")
             if self.report_sections["market_report"]:
                 report_parts.append(
-                    f"### Market Analysis\n{self.report_sections['market_report']}"
+                    f"### Market Analysis\n{self._extract_text(self.report_sections['market_report'])}"
                 )
             if self.report_sections["sentiment_report"]:
                 report_parts.append(
-                    f"### Social Sentiment\n{self.report_sections['sentiment_report']}"
+                    f"### Social Sentiment\n{self._extract_text(self.report_sections['sentiment_report'])}"
                 )
             if self.report_sections["news_report"]:
                 report_parts.append(
-                    f"### News Analysis\n{self.report_sections['news_report']}"
+                    f"### News Analysis\n{self._extract_text(self.report_sections['news_report'])}"
                 )
             if self.report_sections["fundamentals_report"]:
                 report_parts.append(
-                    f"### Fundamentals Analysis\n{self.report_sections['fundamentals_report']}"
+                    f"### Fundamentals Analysis\n{self._extract_text(self.report_sections['fundamentals_report'])}"
                 )
 
         # Research Team Reports
         if self.report_sections["investment_plan"]:
             report_parts.append("## Research Team Decision")
-            report_parts.append(f"{self.report_sections['investment_plan']}")
+            report_parts.append(f"{self._extract_text(self.report_sections['investment_plan'])}")
 
         # Trading Team Reports
         if self.report_sections["trader_investment_plan"]:
             report_parts.append("## Trading Team Plan")
-            report_parts.append(f"{self.report_sections['trader_investment_plan']}")
+            report_parts.append(f"{self._extract_text(self.report_sections['trader_investment_plan'])}")
 
         # Portfolio Management Decision
         if self.report_sections["final_trade_decision"]:
             report_parts.append("## Portfolio Management Decision")
-            report_parts.append(f"{self.report_sections['final_trade_decision']}")
+            report_parts.append(f"{self._extract_text(self.report_sections['final_trade_decision'])}")
 
         self.final_report = "\n\n".join(report_parts) if report_parts else None
 
@@ -793,7 +808,9 @@ def run_analysis():
                 if content:
                     file_name = f"{section_name}.md"
                     with open(report_dir / file_name, "w") as f:
-                        f.write(content)
+                        # Use the helper method to extract text
+                        text_content = obj._extract_text(content)
+                        f.write(text_content)
         return wrapper
 
     message_buffer.add_message = save_message_decorator(message_buffer, "add_message")
